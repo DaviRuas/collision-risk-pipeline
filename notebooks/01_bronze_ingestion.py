@@ -1,59 +1,48 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # 01 — Bronze Ingestion
-# MAGIC Reads raw SAAQ collision CSVs from DBFS, applies an explicit schema,
-# MAGIC renames columns to the bronze naming convention, and writes a Delta table.
+# MAGIC Reads the SAAQ collision table from Unity Catalog, maps columns to the
+# MAGIC bronze naming convention, and writes a Delta table.
 
 # COMMAND ----------
 
 import sys
-sys.path.append("/Workspace/Repos/<your-repo>/src")   # adjust to your Databricks repo path
+sys.path.append("/Workspace/Repos/lalitaru123@gmail.com/collision-risk-pipeline/src")
 
 from pyspark.sql import functions as F
-from src.schema import SAAQ_RAW_SCHEMA
 
 # COMMAND ----------
 
 # --------------------------------------------------------------------------- #
-# Configuration — edit the path after uploading files to DBFS                 #
+# Configuration                                                                #
 # --------------------------------------------------------------------------- #
-SAAQ_DBFS_PATH  = "/dbfs/FileStore/saaq/"         # folder containing *.csv files
-BRONZE_DELTA    = "/delta/collisions_bronze"
-DATE_FORMAT     = "yyyy-MM-dd"                     # adjust if SAAQ uses a different format
+SOURCE_TABLE = "workspace.default.collisions_routieres"
+BRONZE_DELTA  = "/delta/collisions_bronze"
 
 # COMMAND ----------
 
 # --------------------------------------------------------------------------- #
-# 1. Read raw CSVs with explicit schema                                        #
+# 1. Read from Unity Catalog                                                   #
 # --------------------------------------------------------------------------- #
-raw_df = (
-    spark.read
-    .option("header", "true")
-    .option("mode", "PERMISSIVE")          # bad rows land in _corrupt_record
-    .option("encoding", "UTF-8")
-    .schema(SAAQ_RAW_SCHEMA)
-    .csv(SAAQ_DBFS_PATH)
-)
+raw_df = spark.read.table(SOURCE_TABLE)
 
 print(f"Raw row count: {raw_df.count():,}")
 
 # COMMAND ----------
 
 # --------------------------------------------------------------------------- #
-# 2. Rename columns + parse date + add ingested_at                            #
+# 2. Map to bronze schema                                                      #
 # --------------------------------------------------------------------------- #
 bronze_df = (
     raw_df
-    .withColumnRenamed("NO_RAPPORT",    "accident_id")
-    .withColumn("accident_date", F.to_date(F.col("DT_ACCDN"), DATE_FORMAT))
-    .drop("DT_ACCDN")
+    .withColumnRenamed("NO_SEQ_COLL",   "accident_id")
+    .withColumnRenamed("DT_ACCDN",      "accident_date")   # already DateType
     .withColumnRenamed("LOC_LAT",       "latitude")
     .withColumnRenamed("LOC_LONG",      "longitude")
-    .withColumnRenamed("GRAVITE",       "severity")
-    .withColumnRenamed("CD_COND_ROUTE", "road_condition")
-    .withColumnRenamed("CD_METEO",      "weather_condition")
-    .withColumnRenamed("MUN_NM",        "municipality")
-    .drop("HR_ACCDN")                    # kept in raw; not in bronze schema
+    .withColumnRenamed("GRAVITE",       "severity")         # already string
+    .withColumn("road_condition",    F.col("CD_ETAT_SURFC").cast("string"))
+    .withColumn("weather_condition", F.col("CD_COND_METEO").cast("string"))
+    .withColumnRenamed("MRC",           "municipality")
     .withColumn("ingested_at", F.current_timestamp())
     .select(
         "accident_id",
@@ -91,7 +80,5 @@ print(f"Written to {BRONZE_DELTA}")
 validation_df = spark.read.format("delta").load(BRONZE_DELTA)
 
 print(f"Bronze row count : {validation_df.count():,}")
-print(f"Bronze schema    :")
 validation_df.printSchema()
-
 display(validation_df.limit(5))
