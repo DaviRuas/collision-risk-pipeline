@@ -1,20 +1,27 @@
 from pyspark.sql.types import (
     StructType, StructField,
-    StringType, IntegerType, LongType,
+    StringType, LongType,
     DoubleType, DateType, TimestampType,
 )
 
-# Raw SAAQ CSV column names (French headers as published by Quebec open data)
+# Actual Unity Catalog table schema: workspace.default.collisions_routieres
+# Columns used in bronze ingestion (subset of the full 67-column table)
 SAAQ_RAW_SCHEMA = StructType([
-    StructField("NO_RAPPORT",    StringType(),  nullable=True),
-    StructField("DT_ACCDN",      StringType(),  nullable=True),  # "YYYY-MM-DD"
-    StructField("HR_ACCDN",      StringType(),  nullable=True),  # "HH:MM"
-    StructField("LOC_LAT",       DoubleType(),  nullable=True),
-    StructField("LOC_LONG",      DoubleType(),  nullable=True),
-    StructField("GRAVITE",       IntegerType(), nullable=True),  # 1=fatal 2=serious 3=minor 4=PDO
-    StructField("CD_COND_ROUTE", StringType(),  nullable=True),
-    StructField("CD_METEO",      StringType(),  nullable=True),
-    StructField("MUN_NM",        StringType(),  nullable=True),
+    StructField("NO_SEQ_COLL",          StringType(),  nullable=True),
+    StructField("DT_ACCDN",             DateType(),    nullable=True),
+    StructField("HEURE_ACCDN",          StringType(),  nullable=True),
+    StructField("LOC_LAT",              DoubleType(),  nullable=True),
+    StructField("LOC_LONG",             DoubleType(),  nullable=True),
+    StructField("GRAVITE",              StringType(),  nullable=True),  # e.g. "Mortel", "Blessé grave"
+    StructField("CD_ETAT_SURFC",        LongType(),    nullable=True),  # surface condition code
+    StructField("CD_COND_METEO",        LongType(),    nullable=True),  # weather condition code
+    StructField("MRC",                  StringType(),  nullable=True),  # municipal regional county
+    StructField("REG_ADM",              StringType(),  nullable=True),
+    StructField("NB_MORTS",             LongType(),    nullable=True),
+    StructField("NB_BLESSES_GRAVES",    LongType(),    nullable=True),
+    StructField("NB_BLESSES_LEGERS",    LongType(),    nullable=True),
+    StructField("NB_VICTIMES_TOTAL",    LongType(),    nullable=True),
+    StructField("AN",                   LongType(),    nullable=True),
 ])
 
 # Bronze: mapped & renamed columns written to Delta
@@ -23,7 +30,7 @@ BRONZE_SCHEMA = StructType([
     StructField("accident_date",      DateType(),      nullable=True),
     StructField("latitude",           DoubleType(),    nullable=True),
     StructField("longitude",          DoubleType(),    nullable=True),
-    StructField("severity",           IntegerType(),   nullable=True),
+    StructField("severity",           StringType(),    nullable=True),
     StructField("road_condition",     StringType(),    nullable=True),
     StructField("weather_condition",  StringType(),    nullable=True),
     StructField("municipality",       StringType(),    nullable=True),
